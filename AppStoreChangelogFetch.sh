@@ -1,12 +1,18 @@
 #!/bin/bash
 
+#AppStoreChangelogFetch.sh
+# Version 1.1
+
 # === CONFIGURATION ===
 # Replace the following placeholders with your actual App Store Connect API details:
 
-KEY_ID="YOUR_KEY_ID"                    # e.g. "ABC123XYZ9" — found in App Store Connect → Users and Access → API Keys
-ISSUER_ID="YOUR_ISSUER_ID"              # e.g. "11223344-5566-7788-99AA-BBCCDDEEFF00"
-PRIVATE_KEY_PATH="/path/to/AuthKey.p8"  # Path to your downloaded AuthKey_XXXX.p8 file
-APP_ID="YOUR_APP_ID"                    # Internal App ID from App Store Connect (not the public app ID)
+KEY_ID="YOUR_KEY_ID"                              # e.g. "ABC123XYZ9"
+ISSUER_ID="YOUR_ISSUER_ID"                        # e.g. "11223344-5566-7788-99AA-BBCCDDEEFF00"
+PRIVATE_KEY_PATH="/path/to/AuthKey.p8"            # path to your AuthKey file
+APP_ID="YOUR_APP_ID"                              # internal App Store Connect App ID
+
+LOCALE="de-DE"                                    # App Store Region, e.g. "en-US" or "de-DE"
+DATE_FORMAT="%Y-%m-%d %H:%M"                      # desired date format (e.g. "%Y-%m-%d %H:%M" for English style)
 
 # === GENERATE JWT TOKEN ===
 JWT=$(ruby <<EOF
@@ -38,7 +44,7 @@ done
 # === FETCH DETAILS FOR EACH VERSION ===
 for VERSION_ID in "${VERSION_IDS[@]}"; do
   VERSION_INFO=$(curl -s -H "Authorization: Bearer $JWT" \
-	"https://api.appstoreconnect.apple.com/v1/appStoreVersions/$VERSION_ID")
+    "https://api.appstoreconnect.apple.com/v1/appStoreVersions/$VERSION_ID")
 
   VERSION_STRING=$(echo "$VERSION_INFO" | jq -r '.data.attributes.versionString')
 
@@ -48,33 +54,37 @@ for VERSION_ID in "${VERSION_IDS[@]}"; do
 
   RELEASE_DATE_RAW=$(echo "$VERSION_INFO" | jq -r '.data.attributes.releaseDate // empty')
   if [[ -n "$RELEASE_DATE_RAW" ]]; then
-	RELEASE_LABEL="Released"
+    RELEASE_LABEL="Released"
   else
-	RELEASE_DATE_RAW=$(echo "$VERSION_INFO" | jq -r '.data.attributes.earliestReleaseDate // empty')
-	if [[ -n "$RELEASE_DATE_RAW" ]]; then
-	  RELEASE_LABEL="Planned"
-	else
-	  RELEASE_DATE_RAW=$(echo "$VERSION_INFO" | jq -r '.data.attributes.createdDate // empty')
-	  RELEASE_LABEL="Created"
-	fi
+    RELEASE_DATE_RAW=$(echo "$VERSION_INFO" | jq -r '.data.attributes.earliestReleaseDate // empty')
+    if [[ -n "$RELEASE_DATE_RAW" ]]; then
+      RELEASE_LABEL="Planned"
+    else
+      RELEASE_DATE_RAW=$(echo "$VERSION_INFO" | jq -r '.data.attributes.createdDate // empty')
+      RELEASE_LABEL="Created"
+    fi
   fi
 
   # Sanitize timezone offset for macOS date
   RELEASE_DATE_SANITIZED=$(echo "$RELEASE_DATE_RAW" | sed -E 's/([-+][0-9]{2}):([0-9]{2})$/\1\2/')
 
-  # Format into ISO style: YYYY-MM-DD HH:MM
+  # Format date using configured DATE_FORMAT
   if [[ -n "$RELEASE_DATE_SANITIZED" ]]; then
-	RELEASE_DATE_FORMATTED=$(date -j -f "%Y-%m-%dT%H:%M:%S%z" "$RELEASE_DATE_SANITIZED" +"%Y-%m-%d %H:%M" 2>/dev/null)
-	RELEASE_DATE_FORMATTED=${RELEASE_DATE_FORMATTED:-$RELEASE_DATE_RAW}
+    RELEASE_DATE_FORMATTED=$(date -j -f "%Y-%m-%dT%H:%M:%S%z" "$RELEASE_DATE_SANITIZED" +"$DATE_FORMAT" 2>/dev/null)
+    RELEASE_DATE_FORMATTED=${RELEASE_DATE_FORMATTED:-$RELEASE_DATE_RAW}
   else
-	RELEASE_DATE_FORMATTED="– No release date available"
+    RELEASE_DATE_FORMATTED="– No release date available"
   fi
 
-  # Fetch localized "What's New" (German fallback example, adjust locale as needed)
+  # Fetch localized "What's New"
   LOCALIZATIONS=$(curl -s -H "Authorization: Bearer $JWT" \
-	"https://api.appstoreconnect.apple.com/v1/appStoreVersions/$VERSION_ID/appStoreVersionLocalizations")
+    "https://api.appstoreconnect.apple.com/v1/appStoreVersions/$VERSION_ID/appStoreVersionLocalizations")
 
-  WHATS_NEW=$(echo "$LOCALIZATIONS" | jq -r '.data[] | select(.attributes.locale == "en-US") | .attributes.whatsNew // "– No changelog found."')
+  WHATS_NEW=$(echo "$LOCALIZATIONS" | jq -r "
+    (.data[] | select(.attributes.locale == \"$LOCALE\") | .attributes.whatsNew),
+    (.data[0].attributes.whatsNew)
+    // \"– No changelog found.\"
+  " | head -n 1)
 
   echo -e "\n📦 Version: $VERSION_STRING"
   echo -e "📅 $RELEASE_LABEL: $RELEASE_DATE_FORMATTED"
