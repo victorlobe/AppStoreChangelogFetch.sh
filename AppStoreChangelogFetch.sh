@@ -1,7 +1,6 @@
 #!/bin/bash
 
 #AppStoreChangelogFetch.sh
-# Version 1.1
 
 # === CONFIGURATION ===
 # Replace the following placeholders with your actual App Store Connect API details:
@@ -11,7 +10,7 @@ ISSUER_ID="YOUR_ISSUER_ID"                        # e.g. "11223344-5566-7788-99A
 PRIVATE_KEY_PATH="/path/to/AuthKey.p8"            # path to your AuthKey file
 APP_ID="YOUR_APP_ID"                              # internal App Store Connect App ID
 
-LOCALE="de-DE"                                    # App Store Region, e.g. "en-US" or "de-DE"
+LOCALE="en-US"                                    # App Store Region, e.g. "en-US" or "de-DE"
 DATE_FORMAT="%Y-%m-%d %H:%M"                      # desired date format (e.g. "%Y-%m-%d %H:%M" for English style)
 
 # === GENERATE JWT TOKEN ===
